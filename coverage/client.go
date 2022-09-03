@@ -52,10 +52,9 @@ const (
 type SearchRequest struct {
 	Limit      int
 	Offset     int    // Можно учесть после сортировки
-	Query      string // подстрока в 1 из полей
-	OrderField string
-	//  1 по возрастанию, 0 как встретилось, -1 по убыванию
-	OrderBy int
+	Query      string // Подстрока в 1 из полей
+	OrderField string // Name, id or age. Default - name if OrderField is empty
+	OrderBy    int    //  1 по возрастанию, 0 как встретилось, -1 по убыванию
 }
 
 type SearchClient struct {

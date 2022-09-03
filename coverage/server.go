@@ -20,7 +20,7 @@ const (
 
 var PatchDataSet = "dataset.xml"
 
-// аналогична ErrorWithoutSeparator только не добавляет /n
+// аналогична http.Error() только не добавляет /n в конце
 
 func ErrorWithoutSeparator(w http.ResponseWriter, error string, code int) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -37,16 +37,19 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		ErrorWithoutSeparator(w, ErrorBadLimit, 400)
 		return
 	}
+
 	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
 	if err != nil || offset > limit {
 		ErrorWithoutSeparator(w, ErrorBadOffset, 400)
 		return
 	}
+
 	orderBy, err := strconv.Atoi(r.URL.Query().Get("order_by"))
 	if err != nil {
 		ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
 		return
 	}
+
 	query := r.URL.Query().Get("query")
 	orderField := r.URL.Query().Get("order_field")
 	dataSet, err := ioutil.ReadFile(PatchDataSet) //можно не покрывать
@@ -54,33 +57,41 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't read file %s", PatchDataSet), 500)
 		return
 	}
+
 	doc, err := xmlquery.Parse(bytes.NewReader(dataSet))
 	if err != nil {
 		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't parse file %s", PatchDataSet), 500)
 		return
 	}
+
 	root := xmlquery.FindOne(doc, "//root")
 	for _, n := range xmlquery.Find(root, "//row") {
 		if limit < 1 {
 			break
 		}
-		// поиск подстроки query в нужных полях
+
+		// Сортировка найденных юзеров. В if-е поиск подстроки  query в нужных полях
 		if strings.Contains(n.SelectElement("//first_name").InnerText(), query) ||
 			strings.Contains(n.SelectElement("//last_name").InnerText(), query) ||
 			strings.Contains(n.SelectElement("//about").InnerText(), query) {
+
+			// Добавление найденного юзера в слайс юзеров
 			id, err := strconv.Atoi(n.SelectElement("//id").InnerText())
 			if err != nil {
 				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect id", PatchDataSet), 500)
 				return
 			}
+
 			age, err := strconv.Atoi(n.SelectElement("//age").InnerText())
 			if err != nil {
 				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect age", PatchDataSet), 500)
 				return
 			}
+
 			name := n.SelectElement("//first_name").InnerText() + " " + n.SelectElement("//last_name").InnerText()
 			about := n.SelectElement("//about").InnerText()
 			gender := n.SelectElement("//gender").InnerText()
+
 			tmpUser := User{
 				ID:     id,
 				Name:   name,
@@ -92,16 +103,19 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			limit--
 		}
 	}
+
 	switch {
 	case orderField == "Name" || orderField == "":
 		{
 			switch orderBy {
 			case OrderByAsc:
 				sort.Sort(orderNameAsc(Users))
+
 			case OrderByDesc:
 				sort.Sort(orderNameDesc(Users))
 
 			case OrderByAsIs:
+
 			default:
 				ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
 				return
@@ -112,10 +126,12 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			switch orderBy {
 			case OrderByAsc:
 				sort.Sort(orderIdAsc(Users))
+
 			case OrderByDesc:
 				sort.Sort(orderIdDesc(Users))
 
 			case OrderByAsIs:
+
 			default:
 				ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
 				return
@@ -126,10 +142,12 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			switch orderBy {
 			case OrderByAsc:
 				sort.Sort(orderAgeAsc(Users))
+
 			case OrderByDesc:
 				sort.Sort(orderAgeDesc(Users))
 
 			case OrderByAsIs:
+
 			default:
 				{
 					ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
@@ -141,12 +159,18 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		ErrorWithoutSeparator(w, ErrorBadOrderField, 400)
 		return
 	}
+
 	result, err := json.Marshal(Users[offset:]) //можно не покрывать
 	if err != nil {
 		ErrorWithoutSeparator(w, "couldn't marshal result to json", 500)
 		return
 	}
-	fmt.Fprintf(w, string(result))
+
+	_, err = fmt.Fprintf(w, string(result))
+	if err != nil {
+		ErrorWithoutSeparator(w, "couldn't to write result in http.ResponseWriter", 500)
+		return
+	}
 }
 
 //tmpUser := new(User)

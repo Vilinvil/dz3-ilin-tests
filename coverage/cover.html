@@ -55,11 +55,11 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">gitlab.com/mailru-go/lectures-2022-1/03/99_hw/coverage/client.go (0.0%)</option>
+				<option value="file0">dz2-ilin-tests/coverage/client.go (0.0%)</option>
 				
-				<option value="file1">gitlab.com/mailru-go/lectures-2022-1/03/99_hw/coverage/server.go (94.6%)</option>
+				<option value="file1">dz2-ilin-tests/coverage/server.go (92.2%)</option>
 				
-				<option value="file2">gitlab.com/mailru-go/lectures-2022-1/03/99_hw/coverage/sort_types.go (94.4%)</option>
+				<option value="file2">dz2-ilin-tests/coverage/sort_types.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -127,10 +127,9 @@ const (
 type SearchRequest struct {
         Limit      int
         Offset     int    // Можно учесть после сортировки
-        Query      string // подстрока в 1 из полей
-        OrderField string
-        //  1 по возрастанию, 0 как встретилось, -1 по убыванию
-        OrderBy int
+        Query      string // Подстрока в 1 из полей
+        OrderField string // Name, id or age. Default - name if OrderField is empty
+        OrderBy    int    //  1 по возрастанию, 0 как встретилось, -1 по убыванию
 }
 
 type SearchClient struct {
@@ -234,7 +233,7 @@ const (
 
 var PatchDataSet = "dataset.xml"
 
-// аналогична ErrorWithoutSeparator только не добавляет /n
+// аналогична http.Error() только не добавляет /n в конце
 
 func ErrorWithoutSeparator(w http.ResponseWriter, error string, code int) <span class="cov8" title="1">{
         w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -251,16 +250,19 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
                 ErrorWithoutSeparator(w, ErrorBadLimit, 400)
                 return
         }</span>
+
         <span class="cov8" title="1">offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
         if err != nil || offset &gt; limit </span><span class="cov8" title="1">{
                 ErrorWithoutSeparator(w, ErrorBadOffset, 400)
                 return
         }</span>
+
         <span class="cov8" title="1">orderBy, err := strconv.Atoi(r.URL.Query().Get("order_by"))
         if err != nil </span><span class="cov8" title="1">{
                 ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
                 return
         }</span>
+
         <span class="cov8" title="1">query := r.URL.Query().Get("query")
         orderField := r.URL.Query().Get("order_field")
         dataSet, err := ioutil.ReadFile(PatchDataSet) //можно не покрывать
@@ -268,33 +270,41 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
                 ErrorWithoutSeparator(w, fmt.Sprintf("couldn't read file %s", PatchDataSet), 500)
                 return
         }</span>
+
         <span class="cov8" title="1">doc, err := xmlquery.Parse(bytes.NewReader(dataSet))
         if err != nil </span><span class="cov8" title="1">{
                 ErrorWithoutSeparator(w, fmt.Sprintf("couldn't parse file %s", PatchDataSet), 500)
                 return
         }</span>
+
         <span class="cov8" title="1">root := xmlquery.FindOne(doc, "//root")
         for _, n := range xmlquery.Find(root, "//row") </span><span class="cov8" title="1">{
                 if limit &lt; 1 </span><span class="cov8" title="1">{
                         break</span>
                 }
-                // поиск подстроки query в нужных полях
+
+                // Сортировка найденных юзеров. В if-е поиск подстроки  query в нужных полях
                 <span class="cov8" title="1">if strings.Contains(n.SelectElement("//first_name").InnerText(), query) ||
                         strings.Contains(n.SelectElement("//last_name").InnerText(), query) ||
                         strings.Contains(n.SelectElement("//about").InnerText(), query) </span><span class="cov8" title="1">{
+
+                        // Добавление найденного юзера в слайс юзеров
                         id, err := strconv.Atoi(n.SelectElement("//id").InnerText())
                         if err != nil </span><span class="cov8" title="1">{
                                 ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect id", PatchDataSet), 500)
                                 return
                         }</span>
+
                         <span class="cov8" title="1">age, err := strconv.Atoi(n.SelectElement("//age").InnerText())
                         if err != nil </span><span class="cov8" title="1">{
                                 ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect age", PatchDataSet), 500)
                                 return
                         }</span>
+
                         <span class="cov8" title="1">name := n.SelectElement("//first_name").InnerText() + " " + n.SelectElement("//last_name").InnerText()
                         about := n.SelectElement("//about").InnerText()
                         gender := n.SelectElement("//gender").InnerText()
+
                         tmpUser := User{
                                 ID:     id,
                                 Name:   name,
@@ -306,16 +316,19 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
                         limit--</span>
                 }
         }
+
         <span class="cov8" title="1">switch </span>{
         case orderField == "Name" || orderField == "":<span class="cov8" title="1">
                 </span><span class="cov8" title="1">{
                         switch orderBy </span>{
                         case OrderByAsc:<span class="cov8" title="1">
                                 sort.Sort(orderNameAsc(Users))</span>
+
                         case OrderByDesc:<span class="cov8" title="1">
                                 sort.Sort(orderNameDesc(Users))</span>
 
                         case OrderByAsIs:<span class="cov8" title="1"></span>
+
                         default:<span class="cov8" title="1">
                                 ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
                                 return</span>
@@ -326,10 +339,12 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
                         switch orderBy </span>{
                         case OrderByAsc:<span class="cov8" title="1">
                                 sort.Sort(orderIdAsc(Users))</span>
+
                         case OrderByDesc:<span class="cov8" title="1">
                                 sort.Sort(orderIdDesc(Users))</span>
 
                         case OrderByAsIs:<span class="cov8" title="1"></span>
+
                         default:<span class="cov8" title="1">
                                 ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
                                 return</span>
@@ -340,10 +355,12 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
                         switch orderBy </span>{
                         case OrderByAsc:<span class="cov8" title="1">
                                 sort.Sort(orderAgeAsc(Users))</span>
+
                         case OrderByDesc:<span class="cov8" title="1">
                                 sort.Sort(orderAgeDesc(Users))</span>
 
                         case OrderByAsIs:<span class="cov8" title="1"></span>
+
                         default:<span class="cov8" title="1">
                                 </span><span class="cov8" title="1">{
                                         ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
@@ -355,12 +372,18 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
                 ErrorWithoutSeparator(w, ErrorBadOrderField, 400)
                 return</span>
         }
+
         <span class="cov8" title="1">result, err := json.Marshal(Users[offset:]) //можно не покрывать
         if err != nil </span><span class="cov0" title="0">{
                 ErrorWithoutSeparator(w, "couldn't marshal result to json", 500)
                 return
         }</span>
-        <span class="cov8" title="1">fmt.Fprintf(w, string(result))</span>
+
+        <span class="cov8" title="1">_, err = fmt.Fprintf(w, string(result))
+        if err != nil </span><span class="cov0" title="0">{
+                ErrorWithoutSeparator(w, "couldn't to write result in http.ResponseWriter", 500)
+                return
+        }</span>
 }
 
 //tmpUser := new(User)
@@ -391,7 +414,7 @@ type orderIdAsc []User
 
 func (o orderIdAsc) Len() int           <span class="cov8" title="1">{ return len(o) }</span>
 func (o orderIdAsc) Less(i, j int) bool <span class="cov8" title="1">{ return o[i].ID &lt; o[j].ID }</span>
-func (o orderIdAsc) Swap(i, j int)      <span class="cov0" title="0">{ o[i], o[j] = o[j], o[i] }</span>
+func (o orderIdAsc) Swap(i, j int)      <span class="cov8" title="1">{ o[i], o[j] = o[j], o[i] }</span>
 
 type orderIdDesc []User
 
