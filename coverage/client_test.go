@@ -2,7 +2,9 @@ package main
 
 import (
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -22,6 +24,12 @@ type TestCasePatchDataSet struct {
 	TestPatchDataSet string
 	Response         string
 	StatusCode       int
+}
+
+type TestCaseClient struct {
+	Request     SearchRequest
+	Result      SearchResponse
+	ResponseErr error
 }
 
 func TestSearchServerParam(t *testing.T) {
@@ -176,19 +184,19 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
 			TestPatchDataSet: "dataSetForTests/dataSetNoXml.xml",
-			Response:         "couldn't parse file dataSetForTests/dataSetNoXml.xml",
+			Response:         "couldn't parse file dataSetForTests/dataSetNoXml.xml. Error is: XML syntax error on line 37: attribute name without = in element",
 			StatusCode:       500,
 		},
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
 			TestPatchDataSet: "dataSetForTests/dataSetWrongId.xml",
-			Response:         "in dataSetForTests/dataSetWrongId.xml incorrect id",
+			Response:         "in dataSetForTests/dataSetWrongId.xml incorrect id. Error is: strconv.Atoi: parsing \"ghg\": invalid syntax",
 			StatusCode:       500,
 		},
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
 			TestPatchDataSet: "dataSetForTests/dataSetWrongAge.xml",
-			Response:         "in dataSetForTests/dataSetWrongAge.xml incorrect age",
+			Response:         "in dataSetForTests/dataSetWrongAge.xml incorrect age Error is: strconv.Atoi: parsing \"Twenty\": invalid syntax",
 			StatusCode:       500,
 		},
 	}
@@ -215,7 +223,47 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
-	PatchDataSet = "dataSet.xml"
+	PatchDataSet = "dataset.xml"
+}
+
+func TestClient(t *testing.T) {
+	cases := []TestCaseClient{
+		{
+			Request: SearchRequest{Limit: 3,
+				Offset:     2,
+				Query:      "",
+				OrderField: "Id",
+				OrderBy:    1},
+
+			Result: SearchResponse{Users: []User{{ID: 1,
+				Name:   "Hilda Mayer",
+				Age:    21,
+				About:  `Sit commodo consectetur minim amet ex. Elit aute mollit fugiat labore sint ipsum dolor cupidatat qui reprehenderit. Eu nisi in exercitation culpa sint aliqua nulla nulla proident eu. Nisi reprehenderit anim cupidatat dolor incididunt laboris mollit magna commodo ex. Cupidatat sit id aliqua amet nisi et voluptate voluptate commodo ex eiusmod et nulla velit.\n`,
+				Gender: "female"}},
+				NextPage: false},
+
+			ResponseErr: nil,
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(SearchServer))
+	for caseNum, item := range cases {
+		testClient := SearchClient{AccessToken: "42", URL: ts.URL}
+
+		result, err := testClient.FindUsers(item.Request)
+		if err != item.ResponseErr {
+			t.Errorf("[%d] got unexpected error: %#v, expected: %#v", caseNum, err, item.ResponseErr)
+		}
+
+		if item.ResponseErr != nil && err == nil {
+			t.Errorf("[%d] got: %v expected error: %#v", caseNum, err, item.ResponseErr)
+		}
+
+		if !reflect.DeepEqual(item.Result, result) {
+			t.Errorf("[%d] wrong result, got: %#v, expected: %#v,", caseNum, result, item.Result)
+		}
+	}
+	ts.Close()
 }
 
 /*

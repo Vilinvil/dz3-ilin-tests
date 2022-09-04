@@ -54,13 +54,13 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	orderField := r.URL.Query().Get("order_field")
 	dataSet, err := ioutil.ReadFile(PatchDataSet) //можно не покрывать
 	if err != nil {
-		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't read file %s", PatchDataSet), 500)
+		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't read file %s. Error is: %v", PatchDataSet, err), 500)
 		return
 	}
 
 	doc, err := xmlquery.Parse(bytes.NewReader(dataSet))
 	if err != nil {
-		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't parse file %s", PatchDataSet), 500)
+		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't parse file %s. Error is: %v", PatchDataSet, err), 500)
 		return
 	}
 
@@ -78,13 +78,13 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			// Добавление найденного юзера в слайс юзеров
 			id, err := strconv.Atoi(n.SelectElement("//id").InnerText())
 			if err != nil {
-				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect id", PatchDataSet), 500)
+				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect id. Error is: %v", PatchDataSet, err), 500)
 				return
 			}
 
 			age, err := strconv.Atoi(n.SelectElement("//age").InnerText())
 			if err != nil {
-				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect age", PatchDataSet), 500)
+				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect age Error is: %v", PatchDataSet, err), 500)
 				return
 			}
 

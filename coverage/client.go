@@ -105,7 +105,7 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
 	case http.StatusUnauthorized:
 		return nil, fmt.Errorf("bad AccessToken")
 	case http.StatusInternalServerError:
-		return nil, fmt.Errorf("SearchServer fatal error")
+		return nil, fmt.Errorf("SearchServer fatal error. Body: %v", string(body))
 	case http.StatusBadRequest:
 		errResp := SearchErrorResponse{}
 		err = json.Unmarshal(body, &errResp)
@@ -130,6 +130,7 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
 		result.Users = data[0 : len(data)-1]
 	} else {
 		result.Users = data[0:]
+		result.Users[0] = User{ID: 10000}
 	}
 
 	return &result, err
