@@ -39,7 +39,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
-	if err != nil || offset > limit {
+	if err != nil {
 		ErrorWithoutSeparator(w, ErrorBadOffset, 400)
 		return
 	}
@@ -66,7 +66,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 
 	root := xmlquery.FindOne(doc, "//root")
 	for _, n := range xmlquery.Find(root, "//row") {
-		if limit < 1 {
+		if limit+offset < 1 {
 			break
 		}
 
@@ -166,18 +166,13 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = fmt.Fprintf(w, string(result))
+	_, err = fmt.Fprintf(w, string(result)) //можно не покрывать
 	if err != nil {
 		ErrorWithoutSeparator(w, "couldn't to write result in http.ResponseWriter", 500)
 		return
 	}
 }
 
-//tmpUser := new(User)
-//err := xml.Unmarshal([]byte(n.InnerText()), &tmpUser)
-//if err != nil {
-//	// server give error
-//}
 func main() {
 
 }

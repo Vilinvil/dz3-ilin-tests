@@ -130,7 +130,6 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
 		result.Users = data[0 : len(data)-1]
 	} else {
 		result.Users = data[0:]
-		result.Users[0] = User{ID: 10000}
 	}
 
 	return &result, err

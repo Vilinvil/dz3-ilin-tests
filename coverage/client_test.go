@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+const (
+	LimitBelowZero  = "limit must be > 0"
+	OffsetBelowZero = "offset must be > 0"
+)
+
 type TestCaseParam struct {
 	Url      string
 	Response string
@@ -28,7 +33,7 @@ type TestCasePatchDataSet struct {
 
 type TestCaseClient struct {
 	Request     SearchRequest
-	Result      SearchResponse
+	Result      *SearchResponse
 	ResponseErr error
 }
 
@@ -87,6 +92,12 @@ func TestSearchServerParam(t *testing.T) {
 			Url:      "https://127.0.0.1:8080/?limit=4&offset=0&query=&order_field=&order_by=1",
 			Response: `[{"ID":0,"Name":"Boyd Wolf","Age":22,"About":"Nulla cillum enim voluptate consequat laborum esse excepteur occaecat commodo nostrud excepteur ut cupidatat. Occaecat minim incididunt ut proident ad sint nostrud ad laborum sint pariatur. Ut nulla commodo dolore officia. Consequat anim eiusmod amet commodo eiusmod deserunt culpa. Ea sit dolore nostrud cillum proident nisi mollit est Lorem pariatur. Lorem aute officia deserunt dolor nisi aliqua consequat nulla nostrud ipsum irure id deserunt dolore. Minim reprehenderit nulla exercitation labore ipsum.\n","Gender":"male"},{"ID":2,"Name":"Brooks Aguilar","Age":25,"About":"Velit ullamco est aliqua voluptate nisi do. Voluptate magna anim qui cillum aliqua sint veniam reprehenderit consectetur enim. Laborum dolore ut eiusmod ipsum ad anim est do tempor culpa ad do tempor. Nulla id aliqua dolore dolore adipisicing.\n","Gender":"male"},{"ID":3,"Name":"Everett Dillard","Age":27,"About":"Sint eu id sint irure officia amet cillum. Amet consectetur enim mollit culpa laborum ipsum adipisicing est laboris. Adipisicing fugiat esse dolore aliquip quis laborum aliquip dolore. Pariatur do elit eu nostrud occaecat.\n","Gender":"male"},{"ID":1,"Name":"Hilda Mayer","Age":21,"About":"Sit commodo consectetur minim amet ex. Elit aute mollit fugiat labore sint ipsum dolor cupidatat qui reprehenderit. Eu nisi in exercitation culpa sint aliqua nulla nulla proident eu. Nisi reprehenderit anim cupidatat dolor incididunt laboris mollit magna commodo ex. Cupidatat sit id aliqua amet nisi et voluptate voluptate commodo ex eiusmod et nulla velit.\n","Gender":"female"}]`,
 		},
+
+		// Case offset > limit
+		{
+			Url:      "https://127.0.0.1:8080/?limit=2&offset=10&query=&order_field=Id&order_by=1",
+			Response: `[{"ID":10,"Name":"Henderson Maxwell","Age":30,"About":"Ex et excepteur anim in eiusmod. Cupidatat sunt aliquip exercitation velit minim aliqua ad ipsum cillum dolor do sit dolore cillum. Exercitation eu in ex qui voluptate fugiat amet.\n","Gender":"male"},{"ID":11,"Name":"Gilmore Guerra","Age":32,"About":"Labore consectetur do sit et mollit non incididunt. Amet aute voluptate enim et sit Lorem elit. Fugiat proident ullamco ullamco sint pariatur deserunt eu nulla consectetur culpa eiusmod. Veniam irure et deserunt consectetur incididunt ad ipsum sint. Consectetur voluptate adipisicing aute fugiat aliquip culpa qui nisi ut ex esse ex. Sint et anim aliqua pariatur.\n","Gender":"male"}]`,
+		},
 	}
 	for caseNum, item := range cases {
 		req := httptest.NewRequest("GET", item.Url, nil)
@@ -110,8 +121,8 @@ func TestSearchServerParam(t *testing.T) {
 func TestSearchServerErrors(t *testing.T) {
 	cases := []TestCaseErrors{
 		{
-			Url:        "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
-			Response:   `[{"ID":6,"Name":"Jennings Mays","Age":39,"About":"Veniam consectetur non non aliquip exercitation quis qui. Aliquip duis ut ad commodo consequat ipsum cupidatat id anim voluptate deserunt enim laboris. Sunt nostrud voluptate do est tempor esse anim pariatur. Ea do amet Lorem in mollit ipsum irure Lorem exercitation. Exercitation deserunt adipisicing nulla aute ex amet sint tempor incididunt magna. Quis et consectetur dolor nulla reprehenderit culpa laboris voluptate ut mollit. Qui ipsum nisi ullamco sit exercitation nisi magna fugiat anim consectetur officia.\n","Gender":"male"},{"ID":13,"Name":"Whitley Davidson","Age":40,"About":"Consectetur dolore anim veniam aliqua deserunt officia eu. Et ullamco commodo ad officia duis ex incididunt proident consequat nostrud proident quis tempor. Sunt magna ad excepteur eu sint aliqua eiusmod deserunt proident. Do labore est dolore voluptate ullamco est dolore excepteur magna duis quis. Quis laborum deserunt ipsum velit occaecat est laborum enim aute. Officia dolore sit voluptate quis mollit veniam. Laborum nisi ullamco nisi sit nulla cillum et id nisi.\n","Gender":"male"}]`,
+			Url:        "https://127.0.0.1:8080/?limit=2&offset=0&query=&order_field=Age&order_by=1",
+			Response:   `[{"ID":1,"Name":"Hilda Mayer","Age":21,"About":"Sit commodo consectetur minim amet ex. Elit aute mollit fugiat labore sint ipsum dolor cupidatat qui reprehenderit. Eu nisi in exercitation culpa sint aliqua nulla nulla proident eu. Nisi reprehenderit anim cupidatat dolor incididunt laboris mollit magna commodo ex. Cupidatat sit id aliqua amet nisi et voluptate voluptate commodo ex eiusmod et nulla velit.\n","Gender":"female"},{"ID":0,"Name":"Boyd Wolf","Age":22,"About":"Nulla cillum enim voluptate consequat laborum esse excepteur occaecat commodo nostrud excepteur ut cupidatat. Occaecat minim incididunt ut proident ad sint nostrud ad laborum sint pariatur. Ut nulla commodo dolore officia. Consequat anim eiusmod amet commodo eiusmod deserunt culpa. Ea sit dolore nostrud cillum proident nisi mollit est Lorem pariatur. Lorem aute officia deserunt dolor nisi aliqua consequat nulla nostrud ipsum irure id deserunt dolore. Minim reprehenderit nulla exercitation labore ipsum.\n","Gender":"male"}]`,
 			StatusCode: 200,
 		},
 		{
@@ -121,11 +132,6 @@ func TestSearchServerErrors(t *testing.T) {
 		},
 		{
 			Url:        "https://127.0.0.1:8080/?limit=4&offset=rf&query=&order_field=Age&order_by=1",
-			Response:   ErrorBadOffset,
-			StatusCode: 400,
-		},
-		{
-			Url:        "https://127.0.0.1:8080/?limit=4&offset=5&query=&order_field=Age&order_by=1",
 			Response:   ErrorBadOffset,
 			StatusCode: 400,
 		},
@@ -229,18 +235,18 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 func TestClient(t *testing.T) {
 	cases := []TestCaseClient{
 		{
-			Request: SearchRequest{Limit: 3,
-				Offset:     2,
+			Request: SearchRequest{Limit: 1,
+				Offset:     0,
 				Query:      "",
 				OrderField: "Id",
 				OrderBy:    1},
 
-			Result: SearchResponse{Users: []User{{ID: 1,
-				Name:   "Hilda Mayer",
-				Age:    21,
-				About:  `Sit commodo consectetur minim amet ex. Elit aute mollit fugiat labore sint ipsum dolor cupidatat qui reprehenderit. Eu nisi in exercitation culpa sint aliqua nulla nulla proident eu. Nisi reprehenderit anim cupidatat dolor incididunt laboris mollit magna commodo ex. Cupidatat sit id aliqua amet nisi et voluptate voluptate commodo ex eiusmod et nulla velit.\n`,
-				Gender: "female"}},
-				NextPage: false},
+			Result: &SearchResponse{Users: []User{{ID: 0,
+				Name:   "Boyd Wolf",
+				Age:    22,
+				About:  "Nulla cillum enim voluptate consequat laborum esse excepteur occaecat commodo nostrud excepteur ut cupidatat. Occaecat minim incididunt ut proident ad sint nostrud ad laborum sint pariatur. Ut nulla commodo dolore officia. Consequat anim eiusmod amet commodo eiusmod deserunt culpa. Ea sit dolore nostrud cillum proident nisi mollit est Lorem pariatur. Lorem aute officia deserunt dolor nisi aliqua consequat nulla nostrud ipsum irure id deserunt dolore. Minim reprehenderit nulla exercitation labore ipsum.\n",
+				Gender: "male"}},
+				NextPage: true},
 
 			ResponseErr: nil,
 		},
