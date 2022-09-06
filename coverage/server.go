@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/antchfx/xmlquery"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -22,11 +23,21 @@ var PatchDataSet = "dataset.xml"
 
 // аналогична http.Error() только не добавляет /n в конце
 
-func ErrorWithoutSeparator(w http.ResponseWriter, error string, code int) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+func ErrorWrite(w http.ResponseWriter, error string, code int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
-	fmt.Fprint(w, error)
+	data := SearchErrorResponse{Error: error}
+	res, err := json.Marshal(&data) // можно не покрывать
+	if err != nil {
+		log.Printf("couldn't json.Marshall %v. Error is %v", data, err)
+	}
+
+	_, err = w.Write(res) // можно не покрывать
+	if err != nil {
+		log.Printf("couldn't w.Write %v. Error is %v", res, err)
+	}
+
 }
 
 func SearchServer(w http.ResponseWriter, r *http.Request) {
@@ -34,19 +45,19 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	var Users []User
 	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
 	if err != nil {
-		ErrorWithoutSeparator(w, ErrorBadLimit, 400)
+		ErrorWrite(w, ErrorBadLimit, 400)
 		return
 	}
 
 	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
 	if err != nil {
-		ErrorWithoutSeparator(w, ErrorBadOffset, 400)
+		ErrorWrite(w, ErrorBadOffset, 400)
 		return
 	}
 
 	orderBy, err := strconv.Atoi(r.URL.Query().Get("order_by"))
 	if err != nil {
-		ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
+		ErrorWrite(w, ErrorBadOrderBy, 400)
 		return
 	}
 
@@ -54,13 +65,13 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	orderField := r.URL.Query().Get("order_field")
 	dataSet, err := ioutil.ReadFile(PatchDataSet) //можно не покрывать
 	if err != nil {
-		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't read file %s. Error is: %v", PatchDataSet, err), 500)
+		ErrorWrite(w, fmt.Sprintf("couldn't read file %s. Error is: %v", PatchDataSet, err), 500)
 		return
 	}
 
 	doc, err := xmlquery.Parse(bytes.NewReader(dataSet))
 	if err != nil {
-		ErrorWithoutSeparator(w, fmt.Sprintf("couldn't parse file %s. Error is: %v", PatchDataSet, err), 500)
+		ErrorWrite(w, fmt.Sprintf("couldn't parse file %s. Error is: %v", PatchDataSet, err), 500)
 		return
 	}
 
@@ -78,13 +89,13 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			// Добавление найденного юзера в слайс юзеров
 			id, err := strconv.Atoi(n.SelectElement("//id").InnerText())
 			if err != nil {
-				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect id. Error is: %v", PatchDataSet, err), 500)
+				ErrorWrite(w, fmt.Sprintf("in %s incorrect id. Error is: %v", PatchDataSet, err), 500)
 				return
 			}
 
 			age, err := strconv.Atoi(n.SelectElement("//age").InnerText())
 			if err != nil {
-				ErrorWithoutSeparator(w, fmt.Sprintf("in %s incorrect age Error is: %v", PatchDataSet, err), 500)
+				ErrorWrite(w, fmt.Sprintf("in %s incorrect age Error is: %v", PatchDataSet, err), 500)
 				return
 			}
 
@@ -117,7 +128,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			case OrderByAsIs:
 
 			default:
-				ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
+				ErrorWrite(w, ErrorBadOrderBy, 400)
 				return
 			}
 		}
@@ -133,7 +144,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 			case OrderByAsIs:
 
 			default:
-				ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
+				ErrorWrite(w, ErrorBadOrderBy, 400)
 				return
 			}
 		}
@@ -150,25 +161,25 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 
 			default:
 				{
-					ErrorWithoutSeparator(w, ErrorBadOrderBy, 400)
+					ErrorWrite(w, ErrorBadOrderBy, 400)
 					return
 				}
 			}
 		}
 	default:
-		ErrorWithoutSeparator(w, ErrorBadOrderField, 400)
+		ErrorWrite(w, ErrorBadOrderField, 400)
 		return
 	}
 
 	result, err := json.Marshal(Users[offset:]) //можно не покрывать
 	if err != nil {
-		ErrorWithoutSeparator(w, "couldn't marshal result to json", 500)
+		ErrorWrite(w, "couldn't marshal result to json", 500)
 		return
 	}
 
-	_, err = fmt.Fprintf(w, string(result)) //можно не покрывать
+	_, err = w.Write(result) //можно не покрывать
 	if err != nil {
-		ErrorWithoutSeparator(w, "couldn't to write result in http.ResponseWriter", 500)
+		ErrorWrite(w, "couldn't to write result in http.ResponseWriter", 500)
 		return
 	}
 }

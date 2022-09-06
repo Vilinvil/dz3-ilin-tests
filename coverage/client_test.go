@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +11,8 @@ import (
 )
 
 const (
-	LimitBelowZero  = "limit must be > 0"
-	OffsetBelowZero = "offset must be > 0"
+	ErrorLimitBelowZero  = "limit must be > 0"
+	ErrorOffsetBelowZero = "offset must be > 0"
 )
 
 type TestCaseParam struct {
@@ -27,7 +29,7 @@ type TestCaseErrors struct {
 type TestCasePatchDataSet struct {
 	Url              string
 	TestPatchDataSet string
-	Response         string
+	Response         SearchErrorResponse
 	StatusCode       int
 }
 
@@ -121,11 +123,6 @@ func TestSearchServerParam(t *testing.T) {
 func TestSearchServerErrors(t *testing.T) {
 	cases := []TestCaseErrors{
 		{
-			Url:        "https://127.0.0.1:8080/?limit=2&offset=0&query=&order_field=Age&order_by=1",
-			Response:   `[{"ID":1,"Name":"Hilda Mayer","Age":21,"About":"Sit commodo consectetur minim amet ex. Elit aute mollit fugiat labore sint ipsum dolor cupidatat qui reprehenderit. Eu nisi in exercitation culpa sint aliqua nulla nulla proident eu. Nisi reprehenderit anim cupidatat dolor incididunt laboris mollit magna commodo ex. Cupidatat sit id aliqua amet nisi et voluptate voluptate commodo ex eiusmod et nulla velit.\n","Gender":"female"},{"ID":0,"Name":"Boyd Wolf","Age":22,"About":"Nulla cillum enim voluptate consequat laborum esse excepteur occaecat commodo nostrud excepteur ut cupidatat. Occaecat minim incididunt ut proident ad sint nostrud ad laborum sint pariatur. Ut nulla commodo dolore officia. Consequat anim eiusmod amet commodo eiusmod deserunt culpa. Ea sit dolore nostrud cillum proident nisi mollit est Lorem pariatur. Lorem aute officia deserunt dolor nisi aliqua consequat nulla nostrud ipsum irure id deserunt dolore. Minim reprehenderit nulla exercitation labore ipsum.\n","Gender":"male"}]`,
-			StatusCode: 200,
-		},
-		{
 			Url:        "https://127.0.0.1:8080/?limit=tr&offset=24&query=&order_field=Age&order_by=1",
 			Response:   ErrorBadLimit,
 			StatusCode: 400,
@@ -171,15 +168,21 @@ func TestSearchServerErrors(t *testing.T) {
 			t.Errorf("[%d] failed to read body: %v", caseNum, err)
 		}
 
+		var structErr SearchErrorResponse
+		err = json.Unmarshal(body, &structErr)
+		if err != nil {
+			fmt.Printf("%+v\n", structErr)
+			t.Errorf("couldn't json.Unmarshall %v. Error is %v", string(body), err)
+		}
+
 		if resp.StatusCode != item.StatusCode {
 			t.Errorf("[%d] wrong StatusCode: got %+v, expected %+v",
 				caseNum, resp.StatusCode, item.StatusCode)
 		}
 
-		bodyStr := string(body)
-		if bodyStr != item.Response {
+		if structErr.Error != item.Response {
 			t.Errorf("[%d] wrong Response: got %+v, expected %+v",
-				caseNum, bodyStr, item.Response)
+				caseNum, structErr.Error, item.Response)
 		}
 		resp.Body.Close()
 	}
@@ -190,19 +193,19 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
 			TestPatchDataSet: "dataSetForTests/dataSetNoXml.xml",
-			Response:         "couldn't parse file dataSetForTests/dataSetNoXml.xml. Error is: XML syntax error on line 37: attribute name without = in element",
+			Response:         SearchErrorResponse{Error: "couldn't parse file dataSetForTests/dataSetNoXml.xml. Error is: XML syntax error on line 37: attribute name without = in element"},
 			StatusCode:       500,
 		},
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
 			TestPatchDataSet: "dataSetForTests/dataSetWrongId.xml",
-			Response:         "in dataSetForTests/dataSetWrongId.xml incorrect id. Error is: strconv.Atoi: parsing \"ghg\": invalid syntax",
+			Response:         SearchErrorResponse{Error: "in dataSetForTests/dataSetWrongId.xml incorrect id. Error is: strconv.Atoi: parsing \"ghg\": invalid syntax"},
 			StatusCode:       500,
 		},
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
 			TestPatchDataSet: "dataSetForTests/dataSetWrongAge.xml",
-			Response:         "in dataSetForTests/dataSetWrongAge.xml incorrect age Error is: strconv.Atoi: parsing \"Twenty\": invalid syntax",
+			Response:         SearchErrorResponse{Error: "in dataSetForTests/dataSetWrongAge.xml incorrect age Error is: strconv.Atoi: parsing \"Twenty\": invalid syntax"},
 			StatusCode:       500,
 		},
 	}
@@ -222,10 +225,12 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 				caseNum, resp.StatusCode, item.StatusCode)
 		}
 
-		bodyStr := string(body)
-		if bodyStr != item.Response {
+		data := &SearchErrorResponse{}
+		err = json.Unmarshal(body, data)
+
+		if data.Error != item.Response.Error {
 			t.Errorf("[%d] wrong Response: got %+v, expected %+v",
-				caseNum, bodyStr, item.Response)
+				caseNum, data.Error, item.Response.Error)
 		}
 		resp.Body.Close()
 	}
@@ -250,6 +255,45 @@ func TestClient(t *testing.T) {
 
 			ResponseErr: nil,
 		},
+		{
+			Request: SearchRequest{Limit: -1,
+				Offset:     0,
+				Query:      "",
+				OrderField: "Id",
+				OrderBy:    1},
+
+			Result:      nil,
+			ResponseErr: fmt.Errorf(ErrorLimitBelowZero),
+		},
+		{
+			Request: SearchRequest{Limit: 50,
+				Offset:     0,
+				Query:      "This text don't find",
+				OrderField: "Id",
+				OrderBy:    1},
+
+			Result:      &SearchResponse{Users: nil, NextPage: false},
+			ResponseErr: nil,
+		},
+		{
+			Request: SearchRequest{Limit: 2,
+				Offset:     -1,
+				Query:      "",
+				OrderField: "Id",
+				OrderBy:    1},
+
+			Result:      nil,
+			ResponseErr: fmt.Errorf(ErrorOffsetBelowZero),
+		},
+		{
+			Request: SearchRequest{Limit: 5,
+				Offset:     0,
+				Query:      "",
+				OrderField: "BadField",
+				OrderBy:    1},
+			Result:      nil,
+			ResponseErr: fmt.Errorf("OrderFeld %s invalid", "BadField"),
+		},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(SearchServer))
@@ -257,7 +301,7 @@ func TestClient(t *testing.T) {
 		testClient := SearchClient{AccessToken: "42", URL: ts.URL}
 
 		result, err := testClient.FindUsers(item.Request)
-		if err != item.ResponseErr {
+		if !reflect.DeepEqual(err, item.ResponseErr) {
 			t.Errorf("[%d] got unexpected error: %#v, expected: %#v", caseNum, err, item.ResponseErr)
 		}
 
