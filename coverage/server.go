@@ -19,15 +19,18 @@ const (
 	ErrorBadOrderBy = `OrderBy invalid`
 )
 
-var PatchDataSet = "dataset.xml"
+var (
+	autenficationtokens = map[string]struct{}{"2a54a886a8bbcc309ae4ffa75241cd6d": {}}
+	PatchDataSet        = "dataset.xml"
+)
 
 // аналогична http.Error() только не добавляет /n в конце
 
-func ErrorWrite(w http.ResponseWriter, error string, code int) {
+func ErrorWrite(w http.ResponseWriter, errStr string, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
-	data := SearchErrorResponse{Error: error}
+	data := SearchErrorResponse{Error: errStr}
 	res, err := json.Marshal(&data) // можно не покрывать
 	if err != nil {
 		log.Printf("couldn't json.Marshall %v. Error is %v", data, err)
@@ -43,6 +46,13 @@ func ErrorWrite(w http.ResponseWriter, error string, code int) {
 func SearchServer(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	var Users []User
+	token := r.Header.Get("AccessToken")
+	_, ok := autenficationtokens[token]
+	if !ok {
+		ErrorWrite(w, "wrong AccessToken", 401)
+		return
+	}
+
 	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
 	if err != nil {
 		ErrorWrite(w, ErrorBadLimit, 400)

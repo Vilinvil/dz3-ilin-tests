@@ -8,11 +8,16 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 )
 
 const (
 	ErrorLimitBelowZero  = "limit must be > 0"
 	ErrorOffsetBelowZero = "offset must be > 0"
+	ErroeBadAccessToken  = "bad AccessToken"
+	ErrorwrongDataSet    = "SearchServer fatal error. Body: {\"Error\":\"couldn't read file wrongDataSet. Error is: open wrongDataSet: no such file or directory\"}"
+	ErrorTimeout         = "timeout for limit=2&offset=0&order_by=1&order_field=Id&query="
+	ErrorWrongUrl        = "unknown error Get \"wrongUrl?limit=2&offset=0&order_by=1&order_field=Id&query=\": unsupported protocol scheme \"\""
 )
 
 type TestCaseParam struct {
@@ -103,6 +108,7 @@ func TestSearchServerParam(t *testing.T) {
 	}
 	for caseNum, item := range cases {
 		req := httptest.NewRequest("GET", item.Url, nil)
+		req.Header.Add("AccessToken", "2a54a886a8bbcc309ae4ffa75241cd6d")
 		w := httptest.NewRecorder()
 		SearchServer(w, req)
 		resp := w.Result()
@@ -160,6 +166,7 @@ func TestSearchServerErrors(t *testing.T) {
 	}
 	for caseNum, item := range cases {
 		req := httptest.NewRequest("GET", item.Url, nil)
+		req.Header.Add("AccessToken", "2a54a886a8bbcc309ae4ffa75241cd6d")
 		w := httptest.NewRecorder()
 		SearchServer(w, req)
 		resp := w.Result()
@@ -209,9 +216,13 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 			StatusCode:       500,
 		},
 	}
+	defer func() {
+		PatchDataSet = "dataset.xml"
+	}()
 	for caseNum, item := range cases {
 		PatchDataSet = item.TestPatchDataSet
 		req := httptest.NewRequest("GET", item.Url, nil)
+		req.Header.Add("AccessToken", "2a54a886a8bbcc309ae4ffa75241cd6d")
 		w := httptest.NewRecorder()
 		SearchServer(w, req)
 		resp := w.Result()
@@ -234,7 +245,6 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
-	PatchDataSet = "dataset.xml"
 }
 
 func TestClient(t *testing.T) {
@@ -294,12 +304,20 @@ func TestClient(t *testing.T) {
 			Result:      nil,
 			ResponseErr: fmt.Errorf("OrderFeld %s invalid", "BadField"),
 		},
+		{
+			Request: SearchRequest{Limit: 5,
+				Offset:     0,
+				Query:      "",
+				OrderField: "",
+				OrderBy:    987654},
+			Result:      nil,
+			ResponseErr: fmt.Errorf("unknown bad request error: %s", ErrorBadOrderBy),
+		},
 	}
-
 	ts := httptest.NewServer(http.HandlerFunc(SearchServer))
-	for caseNum, item := range cases {
-		testClient := SearchClient{AccessToken: "42", URL: ts.URL}
+	testClient := SearchClient{AccessToken: "2a54a886a8bbcc309ae4ffa75241cd6d", URL: ts.URL}
 
+	for caseNum, item := range cases {
 		result, err := testClient.FindUsers(item.Request)
 		if !reflect.DeepEqual(err, item.ResponseErr) {
 			t.Errorf("[%d] got unexpected error: %#v, expected: %#v", caseNum, err, item.ResponseErr)
@@ -312,6 +330,43 @@ func TestClient(t *testing.T) {
 		if !reflect.DeepEqual(item.Result, result) {
 			t.Errorf("[%d] wrong result, got: %#v, expected: %#v,", caseNum, result, item.Result)
 		}
+	}
+	ts.Close()
+}
+
+func TestClientSpecificError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(SearchServer))
+	testClient := SearchClient{AccessToken: "wrongToken", URL: ts.URL}
+	req := SearchRequest{Limit: 1,
+		Offset:     0,
+		Query:      "",
+		OrderField: "Id",
+		OrderBy:    1}
+
+	result, err := testClient.FindUsers(req)
+	if err.Error() != ErroeBadAccessToken {
+		t.Errorf("Error is: %v. Result is: %v", err, result)
+	}
+	testClient.AccessToken = "2a54a886a8bbcc309ae4ffa75241cd6d"
+
+	client.Timeout = time.Microsecond
+	result, err = testClient.FindUsers(req)
+	if err.Error() != ErrorTimeout {
+		t.Errorf("Error is: %v. Result is: %v", err, result)
+	}
+	client.Timeout = time.Second
+
+	PatchDataSet = "wrongDataSet"
+	result, err = testClient.FindUsers(req)
+	if err.Error() != ErrorwrongDataSet {
+		t.Errorf("Error is: %v. Result is: %v", err, result)
+	}
+	PatchDataSet = "dataset.xml"
+
+	testClient.URL = "wrongUrl"
+	result, err = testClient.FindUsers(req)
+	if err.Error() != ErrorWrongUrl {
+		t.Errorf("Error is: %v. Result is: %v", err, result)
 	}
 	ts.Close()
 }

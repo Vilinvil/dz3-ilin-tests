@@ -55,9 +55,9 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">dz2-ilin-tests/coverage/client.go (81.0%)</option>
+				<option value="file0">dz2-ilin-tests/coverage/client.go (95.2%)</option>
 				
-				<option value="file1">dz2-ilin-tests/coverage/server.go (90.4%)</option>
+				<option value="file1">dz2-ilin-tests/coverage/server.go (93.2%)</option>
 				
 				<option value="file2">dz2-ilin-tests/coverage/sort_types.go (94.4%)</option>
 				
@@ -113,7 +113,7 @@ type SearchResponse struct {
 }
 
 type SearchErrorResponse struct {
-        Error string `json:"error"`
+        Error string
 }
 
 const (
@@ -167,19 +167,19 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) <
         searcherReq.Header.Add("AccessToken", srv.AccessToken)
 
         resp, err := client.Do(searcherReq)
-        if err != nil </span><span class="cov0" title="0">{
-                if err, ok := err.(net.Error); ok &amp;&amp; err.Timeout() </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
+                if err, ok := err.(net.Error); ok &amp;&amp; err.Timeout() </span><span class="cov8" title="1">{
                         return nil, fmt.Errorf("timeout for %s", searcherParams.Encode())
                 }</span>
-                <span class="cov0" title="0">return nil, fmt.Errorf("unknown error %s", err)</span>
+                <span class="cov8" title="1">return nil, fmt.Errorf("unknown error %s", err)</span>
         }
         <span class="cov8" title="1">defer resp.Body.Close()
         body, _ := ioutil.ReadAll(resp.Body) //nolint:errcheck
 
         switch resp.StatusCode </span>{
-        case http.StatusUnauthorized:<span class="cov0" title="0">
+        case http.StatusUnauthorized:<span class="cov8" title="1">
                 return nil, fmt.Errorf("bad AccessToken")</span>
-        case http.StatusInternalServerError:<span class="cov0" title="0">
+        case http.StatusInternalServerError:<span class="cov8" title="1">
                 return nil, fmt.Errorf("SearchServer fatal error. Body: %v", string(body))</span>
         case http.StatusBadRequest:<span class="cov8" title="1">
                 errResp := SearchErrorResponse{}
@@ -190,7 +190,7 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) <
                 <span class="cov8" title="1">if errResp.Error == ErrorBadOrderField </span><span class="cov8" title="1">{
                         return nil, fmt.Errorf("OrderFeld %s invalid", req.OrderField)
                 }</span>
-                <span class="cov0" title="0">return nil, fmt.Errorf("unknown bad request error: %s", errResp.Error)</span>
+                <span class="cov8" title="1">return nil, fmt.Errorf("unknown bad request error: %s", errResp.Error)</span>
         }
 
         <span class="cov8" title="1">data := []User{}
@@ -232,21 +232,24 @@ const (
         ErrorBadOrderBy = `OrderBy invalid`
 )
 
-var PatchDataSet = "dataset.xml"
+var (
+        autenficationtokens = map[string]struct{}{"2a54a886a8bbcc309ae4ffa75241cd6d": {}}
+        PatchDataSet        = "dataset.xml"
+)
 
 // аналогична http.Error() только не добавляет /n в конце
 
-func ErrorWrite(w http.ResponseWriter, error string, code int) <span class="cov8" title="1">{
+func ErrorWrite(w http.ResponseWriter, errStr string, code int) <span class="cov8" title="1">{
         w.Header().Set("Content-Type", "application/json; charset=utf-8")
         w.Header().Set("X-Content-Type-Options", "nosniff")
         w.WriteHeader(code)
-        data := SearchErrorResponse{Error: error}
-        res, err := json.Marshal(&amp;data)
+        data := SearchErrorResponse{Error: errStr}
+        res, err := json.Marshal(&amp;data) // можно не покрывать
         if err != nil </span><span class="cov0" title="0">{
                 log.Printf("couldn't json.Marshall %v. Error is %v", data, err)
         }</span>
 
-        <span class="cov8" title="1">_, err = w.Write(res)
+        <span class="cov8" title="1">_, err = w.Write(res) // можно не покрывать
         if err != nil </span><span class="cov0" title="0">{
                 log.Printf("couldn't w.Write %v. Error is %v", res, err)
         }</span>
@@ -256,7 +259,14 @@ func ErrorWrite(w http.ResponseWriter, error string, code int) <span class="cov8
 func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         defer r.Body.Close()
         var Users []User
-        limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+        token := r.Header.Get("AccessToken")
+        _, ok := autenficationtokens[token]
+        if !ok </span><span class="cov8" title="1">{
+                ErrorWrite(w, "wrong AccessToken", 401)
+                return
+        }</span>
+
+        <span class="cov8" title="1">limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
         if err != nil </span><span class="cov8" title="1">{
                 ErrorWrite(w, ErrorBadLimit, 400)
                 return
@@ -277,7 +287,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" tit
         <span class="cov8" title="1">query := r.URL.Query().Get("query")
         orderField := r.URL.Query().Get("order_field")
         dataSet, err := ioutil.ReadFile(PatchDataSet) //можно не покрывать
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 ErrorWrite(w, fmt.Sprintf("couldn't read file %s. Error is: %v", PatchDataSet, err), 500)
                 return
         }</span>
