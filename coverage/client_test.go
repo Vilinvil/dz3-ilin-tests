@@ -376,4 +376,3 @@ func TestClientSpecificError(t *testing.T) {
 	go tool cover -html=cover.out -o cover.html
 
 */
-// тут писать код тестов
