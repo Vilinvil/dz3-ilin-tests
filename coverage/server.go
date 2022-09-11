@@ -14,99 +14,103 @@ import (
 )
 
 const (
-	ErrorBadLimit   = `Limit invalid`
-	ErrorBadOffset  = `Offset invalid`
-	ErrorBadOrderBy = `OrderBy invalid`
+	ErrorBadLimit    = `Limit invalid`
+	ErrorBadOffset   = `Offset invalid`
+	ErrorBadOrderBy  = `OrderBy invalid`
+	ErrorAccessToken = "wrong AccessToken"
 )
 
 var (
 	autenficationtokens = map[string]struct{}{"2a54a886a8bbcc309ae4ffa75241cd6d": {}}
-	PatchDataSet        = "dataset.xml"
+	PatchDataSet        = "data_set.xml"
 )
 
-// аналогична http.Error() только не добавляет /n в конце
-
-func ErrorWrite(w http.ResponseWriter, errStr string, code int) {
+func errorWrite(w http.ResponseWriter, errStr string, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
 	data := SearchErrorResponse{Error: errStr}
-	res, err := json.Marshal(&data) // можно не покрывать
+	res, err := json.Marshal(&data)
 	if err != nil {
 		log.Printf("couldn't json.Marshall %v. Error is %v", data, err)
 	}
 
-	_, err = w.Write(res) // можно не покрывать
+	_, err = w.Write(res)
 	if err != nil {
 		log.Printf("couldn't w.Write %v. Error is %v", res, err)
 	}
-
 }
 
-func SearchServer(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	var Users []User
+func isTokenValid(r *http.Request) bool {
 	token := r.Header.Get("AccessToken")
 	_, ok := autenficationtokens[token]
-	if !ok {
-		ErrorWrite(w, "wrong AccessToken", 401)
-		return
+	return ok
+}
+
+func getStringParam(r *http.Request, param string) string {
+	return r.URL.Query().Get(param)
+}
+
+func getIntParam(r *http.Request, param string) (int, error) {
+	res, err := strconv.Atoi(r.URL.Query().Get(param))
+	return res, err
+}
+
+func parseParamFromUrl(sr *SearchRequest, r *http.Request) error {
+	var err error
+	sr.Limit, err = getIntParam(r, "limit")
+	if err != nil {
+		return fmt.Errorf("%v. Error is: %v", ErrorBadLimit, err)
 	}
 
-	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	sr.Offset, err = getIntParam(r, "offset")
 	if err != nil {
-		ErrorWrite(w, ErrorBadLimit, 400)
-		return
+		return fmt.Errorf("%v. Error is: %v", ErrorBadOffset, err)
+
 	}
 
-	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+	sr.OrderBy, err = getIntParam(r, "order_by")
 	if err != nil {
-		ErrorWrite(w, ErrorBadOffset, 400)
-		return
+		return fmt.Errorf("%v. Error is: %v", ErrorBadOrderBy, err)
 	}
 
-	orderBy, err := strconv.Atoi(r.URL.Query().Get("order_by"))
-	if err != nil {
-		ErrorWrite(w, ErrorBadOrderBy, 400)
-		return
-	}
+	sr.Query = getStringParam(r, "query")
+	sr.OrderField = getStringParam(r, "order_field")
+	return nil
+}
 
-	query := r.URL.Query().Get("query")
-	orderField := r.URL.Query().Get("order_field")
-	dataSet, err := ioutil.ReadFile(PatchDataSet) //можно не покрывать
+func isQueryInXmlNode(n *xmlquery.Node, query string) bool {
+	return strings.Contains(n.SelectElement("//first_name").InnerText(), query) ||
+		strings.Contains(n.SelectElement("//last_name").InnerText(), query) ||
+		strings.Contains(n.SelectElement("//about").InnerText(), query)
+}
+
+func parseUsersFromXml(sReq *SearchRequest, Users *[]User) error {
+	dataSet, err := ioutil.ReadFile(PatchDataSet)
 	if err != nil {
-		ErrorWrite(w, fmt.Sprintf("couldn't read file %s. Error is: %v", PatchDataSet, err), 500)
-		return
+		return fmt.Errorf("couldn't read file %s. Error is: %v", PatchDataSet, err)
 	}
 
 	doc, err := xmlquery.Parse(bytes.NewReader(dataSet))
 	if err != nil {
-		ErrorWrite(w, fmt.Sprintf("couldn't parse file %s. Error is: %v", PatchDataSet, err), 500)
-		return
+		return fmt.Errorf("couldn't parse file %s. Error is: %v", PatchDataSet, err)
 	}
 
 	root := xmlquery.FindOne(doc, "//root")
 	for _, n := range xmlquery.Find(root, "//row") {
-		if limit+offset < 1 {
+		if sReq.Limit+sReq.Offset < 1 {
 			break
 		}
-
-		// Сортировка найденных юзеров. В if-е поиск подстроки  query в нужных полях
-		if strings.Contains(n.SelectElement("//first_name").InnerText(), query) ||
-			strings.Contains(n.SelectElement("//last_name").InnerText(), query) ||
-			strings.Contains(n.SelectElement("//about").InnerText(), query) {
-
-			// Добавление найденного юзера в слайс юзеров
+		//Поиск нужных юзеров в xml, и добавление их в слайс
+		if isQueryInXmlNode(n, sReq.Query) {
 			id, err := strconv.Atoi(n.SelectElement("//id").InnerText())
 			if err != nil {
-				ErrorWrite(w, fmt.Sprintf("in %s incorrect id. Error is: %v", PatchDataSet, err), 500)
-				return
+				return fmt.Errorf("in %s incorrect id. Error is: %v", PatchDataSet, err)
 			}
 
 			age, err := strconv.Atoi(n.SelectElement("//age").InnerText())
 			if err != nil {
-				ErrorWrite(w, fmt.Sprintf("in %s incorrect age Error is: %v", PatchDataSet, err), 500)
-				return
+				return fmt.Errorf("in %s incorrect age Error is: %v", PatchDataSet, err)
 			}
 
 			name := n.SelectElement("//first_name").InnerText() + " " + n.SelectElement("//last_name").InnerText()
@@ -120,80 +124,104 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 				About:  about,
 				Gender: gender,
 			}
-			Users = append(Users, tmpUser)
-			limit--
+			*Users = append(*Users, tmpUser)
+			sReq.Limit--
 		}
 	}
+	return nil
+}
 
-	switch {
-	case orderField == "Name" || orderField == "":
+func sortSlUser(sReq *SearchRequest, Users *[]User) error {
+	switch sReq.OrderField {
+	case "Name", "":
 		{
-			switch orderBy {
+			switch sReq.OrderBy {
 			case OrderByAsc:
-				sort.Sort(orderNameAsc(Users))
+				sort.Sort(orderNameAsc(*Users))
 
 			case OrderByDesc:
-				sort.Sort(orderNameDesc(Users))
+				sort.Sort(orderNameDesc(*Users))
 
 			case OrderByAsIs:
 
 			default:
-				ErrorWrite(w, ErrorBadOrderBy, 400)
-				return
+				return fmt.Errorf(ErrorBadOrderBy)
 			}
 		}
-	case orderField == "Id":
+	case "Id":
 		{
-			switch orderBy {
+			switch sReq.OrderBy {
 			case OrderByAsc:
-				sort.Sort(orderIdAsc(Users))
+				sort.Sort(orderIdAsc(*Users))
 
 			case OrderByDesc:
-				sort.Sort(orderIdDesc(Users))
+				sort.Sort(orderIdDesc(*Users))
 
 			case OrderByAsIs:
 
 			default:
-				ErrorWrite(w, ErrorBadOrderBy, 400)
-				return
+				return fmt.Errorf(ErrorBadOrderBy)
 			}
 		}
-	case orderField == "Age":
+	case "Age":
 		{
-			switch orderBy {
+			switch sReq.OrderBy {
 			case OrderByAsc:
-				sort.Sort(orderAgeAsc(Users))
+				sort.Sort(orderAgeAsc(*Users))
 
 			case OrderByDesc:
-				sort.Sort(orderAgeDesc(Users))
+				sort.Sort(orderAgeDesc(*Users))
 
 			case OrderByAsIs:
 
 			default:
 				{
-					ErrorWrite(w, ErrorBadOrderBy, 400)
-					return
+					return fmt.Errorf(ErrorBadOrderBy)
 				}
 			}
 		}
 	default:
-		ErrorWrite(w, ErrorBadOrderField, 400)
-		return
+		return fmt.Errorf(ErrorBadOrderField)
 	}
-
-	result, err := json.Marshal(Users[offset:]) //можно не покрывать
-	if err != nil {
-		ErrorWrite(w, "couldn't marshal result to json", 500)
-		return
-	}
-
-	_, err = w.Write(result) //можно не покрывать
-	if err != nil {
-		ErrorWrite(w, "couldn't to write result in http.ResponseWriter", 500)
-		return
-	}
+	return nil
 }
 
-func main() {
+func SearchServer(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if !isTokenValid(r) {
+		errorWrite(w, ErrorAccessToken, http.StatusUnauthorized)
+		return
+	}
 
+	sReq := &SearchRequest{}
+	err := parseParamFromUrl(sReq, r)
+	if err != nil {
+		errorWrite(w, err.Error(), 400)
+		return
+	}
+
+	var Users []User
+	err = parseUsersFromXml(sReq, &Users)
+	if err != nil {
+		errorWrite(w, err.Error(), 500)
+		return
+	}
+
+	err = sortSlUser(sReq, &Users)
+	if err != nil {
+		errorWrite(w, err.Error(), 400)
+		return
+	}
+
+	result, err := json.Marshal(Users[sReq.Offset:])
+	if err != nil {
+		errorWrite(w, "couldn't marshal result to json", 500)
+		return
+	}
+
+	_, err = w.Write(result)
+	if err != nil {
+		errorWrite(w, "couldn't to write result in http.ResponseWriter", 500)
+		return
+	}
 }

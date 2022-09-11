@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -187,7 +188,7 @@ func TestSearchServerErrors(t *testing.T) {
 				caseNum, resp.StatusCode, item.StatusCode)
 		}
 
-		if structErr.Error != item.Response {
+		if !strings.Contains(structErr.Error, item.Response) {
 			t.Errorf("[%d] wrong Response: got %+v, expected %+v",
 				caseNum, structErr.Error, item.Response)
 		}
@@ -199,25 +200,25 @@ func TestSearchServerPatchDataSet(t *testing.T) {
 	cases := []TestCasePatchDataSet{
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
-			TestPatchDataSet: "dataSetForTests/dataSetNoXml.xml",
-			Response:         SearchErrorResponse{Error: "couldn't parse file dataSetForTests/dataSetNoXml.xml. Error is: XML syntax error on line 37: attribute name without = in element"},
+			TestPatchDataSet: "data_set_for_tests/data_set_no_xml.xml",
+			Response:         SearchErrorResponse{Error: "couldn't parse file data_set_for_tests/data_set_no_xml.xml. Error is: XML syntax error on line 37: attribute name without = in element"},
 			StatusCode:       500,
 		},
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
-			TestPatchDataSet: "dataSetForTests/dataSetWrongId.xml",
-			Response:         SearchErrorResponse{Error: "in dataSetForTests/dataSetWrongId.xml incorrect id. Error is: strconv.Atoi: parsing \"ghg\": invalid syntax"},
+			TestPatchDataSet: "data_set_for_tests/data_set_wrong_id.xml",
+			Response:         SearchErrorResponse{Error: "in data_set_for_tests/data_set_wrong_id.xml incorrect id. Error is: strconv.Atoi: parsing \"ghg\": invalid syntax"},
 			StatusCode:       500,
 		},
 		{
 			Url:              "https://127.0.0.1:8080/?limit=26&offset=24&query=&order_field=Age&order_by=1",
-			TestPatchDataSet: "dataSetForTests/dataSetWrongAge.xml",
-			Response:         SearchErrorResponse{Error: "in dataSetForTests/dataSetWrongAge.xml incorrect age Error is: strconv.Atoi: parsing \"Twenty\": invalid syntax"},
+			TestPatchDataSet: "data_set_for_tests/data_set_wrong_age.xml",
+			Response:         SearchErrorResponse{Error: "in data_set_for_tests/data_set_wrong_age.xml incorrect age Error is: strconv.Atoi: parsing \"Twenty\": invalid syntax"},
 			StatusCode:       500,
 		},
 	}
 	defer func() {
-		PatchDataSet = "dataset.xml"
+		PatchDataSet = "data_set.xml"
 	}()
 	for caseNum, item := range cases {
 		PatchDataSet = item.TestPatchDataSet
@@ -361,7 +362,7 @@ func TestClientSpecificError(t *testing.T) {
 	if err.Error() != ErrorwrongDataSet {
 		t.Errorf("Error is: %v. Result is: %v", err, result)
 	}
-	PatchDataSet = "dataset.xml"
+	PatchDataSet = "data_set.xml"
 
 	testClient.URL = "wrongUrl"
 	result, err = testClient.FindUsers(req)

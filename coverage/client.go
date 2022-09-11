@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -12,16 +11,8 @@ import (
 	"time"
 )
 
-//nolint:unused,varcheck
-const (
-	orderAsc = iota
-	orderDesc
-)
-
-//nolint:unused,varcheck
 var (
-	errTest = errors.New("testing")
-	client  = &http.Client{Timeout: time.Second}
+	client = &http.Client{Timeout: time.Second}
 )
 
 type User struct {
@@ -50,11 +41,15 @@ const (
 )
 
 type SearchRequest struct {
-	Limit      int
-	Offset     int    // Можно учесть после сортировки
-	Query      string // Подстрока в 1 из полей
-	OrderField string // Name, id or age. Default - name if OrderField is empty
-	OrderBy    int    //  1 по возрастанию, 0 как встретилось, -1 по убыванию
+	Limit int
+	// Можно учесть после сортировки
+	Offset int
+	// Подстрока в 1 из полей
+	Query string
+	// Name, id or age. Default - name if OrderField is empty
+	OrderField string
+	//  1 по возрастанию, 0 как встретилось, -1 по убыванию
+	OrderBy int
 }
 
 type SearchClient struct {
@@ -68,7 +63,6 @@ type SearchClient struct {
 func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
 
 	searcherParams := url.Values{}
-
 	if req.Limit < 0 {
 		return nil, fmt.Errorf("limit must be > 0")
 	}
