@@ -6,6 +6,7 @@ func (o orderNameAsc) Len() int {
 	return len(o)
 }
 
+// Less определяет по какому принципу перемешать элементы влево(в начало) слайса. Здесь влево пойдет меньший элемент.
 func (o orderNameAsc) Less(i, j int) bool {
 	return o[i].Name < o[j].Name
 }
@@ -20,6 +21,7 @@ func (o orderNameDesc) Len() int {
 	return len(o)
 }
 
+// Less определяет по какому принципу перемешать элементы влево(в начало) слайса. Здесь влево пойдет больший элемент.
 func (o orderNameDesc) Less(i, j int) bool {
 	return o[i].Name > o[j].Name
 }
@@ -34,6 +36,7 @@ func (o orderIdAsc) Len() int {
 	return len(o)
 }
 
+// Less определяет по какому принципу перемешать элементы влево(в начало) слайса. Здесь влево пойдет меньший элемент.
 func (o orderIdAsc) Less(i, j int) bool {
 	return o[i].ID < o[j].ID
 }
@@ -48,6 +51,7 @@ func (o orderIdDesc) Len() int {
 	return len(o)
 }
 
+// Less определяет по какому принципу перемешать элементы влево(в начало) слайса. Здесь влево пойдет больший элемент.
 func (o orderIdDesc) Less(i, j int) bool {
 	return o[i].ID > o[j].ID
 }
@@ -62,6 +66,7 @@ func (o orderAgeAsc) Len() int {
 	return len(o)
 }
 
+// Less определяет по какому принципу перемешать элементы влево(в начало) слайса. Здесь влево пойдет меньший элемент.
 func (o orderAgeAsc) Less(i, j int) bool {
 	return o[i].Age < o[j].Age
 }
@@ -76,6 +81,7 @@ func (o orderAgeDesc) Len() int {
 	return len(o)
 }
 
+// Less определяет по какому принципу перемешать элементы влево(в начало) слайса. Здесь влево пойдет больший элемент.
 func (o orderAgeDesc) Less(i, j int) bool {
 	return o[i].Age > o[j].Age
 }

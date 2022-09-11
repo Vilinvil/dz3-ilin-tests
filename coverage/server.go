@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/antchfx/xmlquery"
 	"io/ioutil"
@@ -13,17 +14,23 @@ import (
 	"strings"
 )
 
-const (
-	ErrorBadLimit    = `Limit invalid`
-	ErrorBadOffset   = `Offset invalid`
-	ErrorBadOrderBy  = `OrderBy invalid`
-	ErrorAccessToken = "wrong AccessToken"
-)
-
 var (
+	ErrorNotFound      = clientError("Users by request not found")
+	ErrorBadOrderField = clientError("OrderField invalid")
+	ErrorAccessToken   = clientError("Wrong AccessToken")
+	ErrorServer        = clientError("Internal server error")
+	ErrorBadRequest    = clientError("request invalid")
+	ErrorBadOrderBy    = clientError("OrderBy invalid")
+
 	autenficationtokens = map[string]struct{}{"2a54a886a8bbcc309ae4ffa75241cd6d": {}}
 	PatchDataSet        = "data_set.xml"
 )
+
+type clientError string
+
+func (c clientError) Error() string {
+	return string(c)
+}
 
 func errorWrite(w http.ResponseWriter, errStr string, code int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -41,101 +48,196 @@ func errorWrite(w http.ResponseWriter, errStr string, code int) {
 	}
 }
 
-func isTokenValid(r *http.Request) bool {
+func isTokenValid(r *http.Request) (bool, error) {
+	if r == nil {
+		return false, fmt.Errorf("*http.Request == nil in isTokenValid. %w", ErrorServer)
+	}
+
 	token := r.Header.Get("AccessToken")
 	_, ok := autenficationtokens[token]
-	return ok
+	return ok, nil
 }
 
-func getStringParam(r *http.Request, param string) string {
-	return r.URL.Query().Get(param)
+func getStringParam(r *http.Request, param string) (string, error) {
+	if r == nil {
+		return "", fmt.Errorf("*http.Request == nil in getStringParam. %w", ErrorServer)
+	}
+	return r.URL.Query().Get(param), nil
 }
 
 func getIntParam(r *http.Request, param string) (int, error) {
-	res, err := strconv.Atoi(r.URL.Query().Get(param))
-	return res, err
+	if r == nil {
+		return 0, fmt.Errorf("*http.Request == nil in getIntParam . %w", ErrorServer)
+	}
+
+	return strconv.Atoi(r.URL.Query().Get(param))
 }
 
 func parseParamFromUrl(sr *SearchRequest, r *http.Request) error {
+	if sr == nil {
+		return fmt.Errorf("*SearchRequest == nil in parseParamFromUrl. %w", ErrorServer)
+	}
+	if r == nil {
+		return fmt.Errorf("*http.Request == nil in parseParamFromUrl. %w", ErrorServer)
+	}
+
 	var err error
 	sr.Limit, err = getIntParam(r, "limit")
 	if err != nil {
-		return fmt.Errorf("%v. Error is: %v", ErrorBadLimit, err)
+		return fmt.Errorf("error is: %w in parseParamFromUrl", err)
+	}
+	if sr.Limit < 1 {
+		return fmt.Errorf("limit must be > 0")
 	}
 
 	sr.Offset, err = getIntParam(r, "offset")
 	if err != nil {
-		return fmt.Errorf("%v. Error is: %v", ErrorBadOffset, err)
-
+		return fmt.Errorf("error is: %w in parseParamFromUrl", err)
+	}
+	if sr.Offset < 0 {
+		return fmt.Errorf("offset must be >= 0")
 	}
 
 	sr.OrderBy, err = getIntParam(r, "order_by")
 	if err != nil {
-		return fmt.Errorf("%v. Error is: %v", ErrorBadOrderBy, err)
+		return fmt.Errorf("error is: %w in parseParamFromUrl", err)
 	}
 
-	sr.Query = getStringParam(r, "query")
-	sr.OrderField = getStringParam(r, "order_field")
+	sr.Query, err = getStringParam(r, "query")
+	if err != nil {
+		return fmt.Errorf("error is: %w in parseParamFromUrl", err)
+	}
+	sr.OrderField, err = getStringParam(r, "order_field")
+	if err != nil {
+		return fmt.Errorf("error is: %w in parseParamFromUrl", err)
+	}
+
 	return nil
 }
 
-func isQueryInXmlNode(n *xmlquery.Node, query string) bool {
-	return strings.Contains(n.SelectElement("//first_name").InnerText(), query) ||
-		strings.Contains(n.SelectElement("//last_name").InnerText(), query) ||
-		strings.Contains(n.SelectElement("//about").InnerText(), query)
+func getNodeElementText(node *xmlquery.Node, elem string) (string, error) {
+	if node == nil {
+		return "", fmt.Errorf("*xmlquery.Node == nil in getNodeElementText. %w", ErrorServer)
+	}
+	return node.SelectElement(elem).InnerText(), nil
 }
 
-func parseUsersFromXml(sReq *SearchRequest, Users *[]User) error {
-	dataSet, err := ioutil.ReadFile(PatchDataSet)
-	if err != nil {
-		return fmt.Errorf("couldn't read file %s. Error is: %v", PatchDataSet, err)
+func getNodeElementInt(node *xmlquery.Node, elem string) (int, error) {
+	if node == nil {
+		return 0, fmt.Errorf("*xmlquery.Node == nil in getNodeElementInt. %w", ErrorServer)
+	}
+	return strconv.Atoi(node.SelectElement(elem).InnerText())
+}
+
+func isQueryInXmlNode(node *xmlquery.Node, query string) (bool, error) {
+	if node == nil {
+		return false, fmt.Errorf("*xmlquery.Node == nil in isQueryInXmlNode. %w", ErrorServer)
 	}
 
-	doc, err := xmlquery.Parse(bytes.NewReader(dataSet))
+	fName, err := getNodeElementText(node, "//first_name")
 	if err != nil {
-		return fmt.Errorf("couldn't parse file %s. Error is: %v", PatchDataSet, err)
+		return false, fmt.Errorf("error is %w in isQueryInXmlNode", err)
+	}
+
+	lName, err := getNodeElementText(node, "//last_name")
+	if err != nil {
+		return false, fmt.Errorf("error is %w in isQueryInXmlNode", err)
+	}
+
+	about, err := getNodeElementText(node, "//about")
+	if err != nil {
+		return false, fmt.Errorf("error is %w in isQueryInXmlNode", err)
+	}
+	return strings.Contains(fName, query) ||
+		strings.Contains(lName, query) ||
+		strings.Contains(about, query), nil
+}
+
+func createReaderFromFile(patchFile string) (*bytes.Reader, error) {
+	data, err := ioutil.ReadFile(patchFile)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't read file %s in createReaderFromFile. Error is: %+v. %w", PatchDataSet, err, ErrorServer)
+	}
+	return bytes.NewReader(data), nil
+}
+
+func parseUsersFromXml(limit, offset int, query string) (*[]User, error) {
+	dataSet, err := createReaderFromFile(PatchDataSet)
+	if err != nil {
+		return nil, fmt.Errorf("error is: %w in parseUsersFromXml", err)
+	}
+
+	doc, err := xmlquery.Parse(dataSet)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't parse file %s. Error is: %+v. %w", PatchDataSet, err, ErrorServer)
 	}
 
 	root := xmlquery.FindOne(doc, "//root")
-	for _, n := range xmlquery.Find(root, "//row") {
-		if sReq.Limit+sReq.Offset < 1 {
+	if root == nil {
+		return nil, fmt.Errorf("//root(node) == nil in parseUsersFromXml. %w", ErrorServer)
+	}
+
+	Users := make([]User, 0)
+	for _, node := range xmlquery.Find(root, "//row") {
+		if limit+offset < 1 {
 			break
 		}
-		//Поиск нужных юзеров в xml, и добавление их в слайс
-		if isQueryInXmlNode(n, sReq.Query) {
-			id, err := strconv.Atoi(n.SelectElement("//id").InnerText())
+
+		bollQueryInXmlNode, err := isQueryInXmlNode(node, query)
+		if err != nil {
+			return nil, fmt.Errorf("%v == nil in parseUsersFromXml", node)
+		}
+
+		if bollQueryInXmlNode {
+			id, err := getNodeElementInt(node, "id")
 			if err != nil {
-				return fmt.Errorf("in %s incorrect id. Error is: %v", PatchDataSet, err)
+				return nil, fmt.Errorf("incorrect id in %s. Error is: %+v", PatchDataSet, err)
 			}
 
-			age, err := strconv.Atoi(n.SelectElement("//age").InnerText())
+			age, err := getNodeElementInt(node, "age")
 			if err != nil {
-				return fmt.Errorf("in %s incorrect age Error is: %v", PatchDataSet, err)
+				return nil, fmt.Errorf("incorrect age in %s. Error is: %+v", PatchDataSet, err)
 			}
 
-			name := n.SelectElement("//first_name").InnerText() + " " + n.SelectElement("//last_name").InnerText()
-			about := n.SelectElement("//about").InnerText()
-			gender := n.SelectElement("//gender").InnerText()
+			fName, err := getNodeElementText(node, "//first_name")
+			if err != nil {
+				return nil, fmt.Errorf("error is %w in parseUsersFromXml", err)
+			}
 
-			tmpUser := User{
+			lName, err := getNodeElementText(node, "//last_name")
+			if err != nil {
+				return nil, fmt.Errorf("error is %w in parseUsersFromXml", err)
+			}
+
+			about, err := getNodeElementText(node, "//about")
+			if err != nil {
+				return nil, fmt.Errorf("error is %w in parseUsersFromXml", err)
+			}
+
+			gender, err := getNodeElementText(node, "//gender")
+			if err != nil {
+				return nil, fmt.Errorf("error is %w in parseUsersFromXml", err)
+			}
+
+			Users = append(Users, User{
 				ID:     id,
-				Name:   name,
+				Name:   fName + " " + lName,
 				Age:    age,
 				About:  about,
 				Gender: gender,
-			}
-			*Users = append(*Users, tmpUser)
-			sReq.Limit--
+			})
+			limit--
 		}
 	}
-	return nil
+
+	return &Users, nil
 }
 
-func sortSlUser(sReq *SearchRequest, Users *[]User) error {
-	switch sReq.OrderField {
+func sortSlUser(orderField string, orderBy int, Users *[]User) error {
+	switch orderField {
 	case "Name", "":
 		{
-			switch sReq.OrderBy {
+			switch orderBy {
 			case OrderByAsc:
 				sort.Sort(orderNameAsc(*Users))
 
@@ -145,12 +247,12 @@ func sortSlUser(sReq *SearchRequest, Users *[]User) error {
 			case OrderByAsIs:
 
 			default:
-				return fmt.Errorf(ErrorBadOrderBy)
+				return fmt.Errorf("%w in sortSlUsers", ErrorBadOrderBy)
 			}
 		}
 	case "Id":
 		{
-			switch sReq.OrderBy {
+			switch orderBy {
 			case OrderByAsc:
 				sort.Sort(orderIdAsc(*Users))
 
@@ -160,12 +262,12 @@ func sortSlUser(sReq *SearchRequest, Users *[]User) error {
 			case OrderByAsIs:
 
 			default:
-				return fmt.Errorf(ErrorBadOrderBy)
+				return fmt.Errorf("%w in sortSlUsers", ErrorBadOrderBy)
 			}
 		}
 	case "Age":
 		{
-			switch sReq.OrderBy {
+			switch orderBy {
 			case OrderByAsc:
 				sort.Sort(orderAgeAsc(*Users))
 
@@ -175,53 +277,72 @@ func sortSlUser(sReq *SearchRequest, Users *[]User) error {
 			case OrderByAsIs:
 
 			default:
-				{
-					return fmt.Errorf(ErrorBadOrderBy)
-				}
+				return fmt.Errorf("%w in sortSlUsers", ErrorBadOrderBy)
 			}
 		}
 	default:
-		return fmt.Errorf(ErrorBadOrderField)
+		return fmt.Errorf("%w in sortSlUsers", ErrorBadOrderField)
 	}
+
 	return nil
 }
 
 func SearchServer(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	if !isTokenValid(r) {
-		errorWrite(w, ErrorAccessToken, http.StatusUnauthorized)
+	boolTokenValid, err := isTokenValid(r)
+	if err != nil {
+		log.Printf("Error is: %+v in SearchServer", err)
+		errorWrite(w, ErrorServer.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !boolTokenValid {
+		log.Printf("User is not authorized. Token is %+v.", r.Header.Get("AccessToken"))
+		errorWrite(w, ErrorAccessToken.Error(), http.StatusUnauthorized)
 		return
 	}
 
 	sReq := &SearchRequest{}
-	err := parseParamFromUrl(sReq, r)
+	err = parseParamFromUrl(sReq, r)
 	if err != nil {
-		errorWrite(w, err.Error(), 400)
+		log.Printf("Error is: %+v in SearchServer", err)
+		if errors.Is(err, ErrorServer) {
+			errorWrite(w, ErrorServer.Error(), http.StatusInternalServerError)
+		} else {
+			errorWrite(w, ErrorBadRequest.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 
-	var Users []User
-	err = parseUsersFromXml(sReq, &Users)
-	if err != nil {
-		errorWrite(w, err.Error(), 500)
+	var Users *[]User
+	Users, err = parseUsersFromXml(sReq.Limit, sReq.Offset, sReq.Query)
+	if err != nil || Users == nil {
+		log.Printf("Error is: %+v in SearchServer. Users are: %+v", err, Users)
+		errorWrite(w, ErrorServer.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	err = sortSlUser(sReq, &Users)
+	err = sortSlUser(sReq.OrderField, sReq.OrderBy, Users)
 	if err != nil {
-		errorWrite(w, err.Error(), 400)
+		log.Printf("Error is: %+v in SearchServer.", err)
+		errorWrite(w, ErrorBadRequest.Error(), http.StatusBadRequest)
 		return
 	}
 
-	result, err := json.Marshal(Users[sReq.Offset:])
+	if len(*Users) <= sReq.Offset {
+		log.Printf("Operation (*Users)[sReq.Offset:] not posible because len(*Users) <= sReq.Offset")
+		errorWrite(w, ErrorNotFound.Error(), 404)
+		return
+	}
+	result, err := json.Marshal((*Users)[sReq.Offset:])
 	if err != nil {
-		errorWrite(w, "couldn't marshal result to json", 500)
+		log.Printf("Couldn't marshal result to json in SearchServer. Error is: %+v", err)
+		errorWrite(w, ErrorServer.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(result)
 	if err != nil {
-		errorWrite(w, "couldn't to write result in http.ResponseWriter", 500)
+		log.Printf("Couldn't to write result in http.ResponseWriter in SearchServer. Error is: %+v", err)
+		errorWrite(w, ErrorServer.Error(), http.StatusInternalServerError)
 		return
 	}
 }

@@ -36,8 +36,6 @@ const (
 	OrderByAsc  = 1
 	OrderByAsIs = 0
 	OrderByDesc = -1
-
-	ErrorBadOrderField = `OrderField invalid`
 )
 
 type SearchRequest struct {
@@ -61,7 +59,6 @@ type SearchClient struct {
 
 // FindUsers отправляет запрос во внешнюю систему, которая непосредственно ищет пользователей
 func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
-
 	searcherParams := url.Values{}
 	if req.Limit < 0 {
 		return nil, fmt.Errorf("limit must be > 0")
@@ -100,14 +97,18 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
 		return nil, fmt.Errorf("bad AccessToken")
 	case http.StatusInternalServerError:
 		return nil, fmt.Errorf("SearchServer fatal error. Body: %v", string(body))
-	case http.StatusBadRequest:
+	case http.StatusNotFound:
 		errResp := SearchErrorResponse{}
 		err = json.Unmarshal(body, &errResp)
 		if err != nil {
 			return nil, fmt.Errorf("cant unpack error json: %s", err)
 		}
-		if errResp.Error == ErrorBadOrderField {
-			return nil, fmt.Errorf("OrderFeld %s invalid", req.OrderField)
+		return nil, fmt.Errorf("users not found")
+	case http.StatusBadRequest:
+		errResp := SearchErrorResponse{}
+		err = json.Unmarshal(body, &errResp)
+		if err != nil {
+			return nil, fmt.Errorf("cant unpack error json: %s", err)
 		}
 		return nil, fmt.Errorf("unknown bad request error: %s", errResp.Error)
 	}
