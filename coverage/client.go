@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -12,16 +11,9 @@ import (
 	"time"
 )
 
-//nolint:unused,varcheck
-const (
-	orderAsc = iota
-	orderDesc
-)
-
-//nolint:unused,varcheck
 var (
-	errTest = errors.New("testing")
-	client  = &http.Client{Timeout: time.Second}
+	client = &http.Client{Timeout: time.Second}
+
 )
 
 type User struct {
@@ -46,13 +38,15 @@ const (
 	OrderByAsIs = 0
 	OrderByDesc = -1
 
-	ErrorBadOrderField = `OrderField invalid`
 )
 
 type SearchRequest struct {
-	Limit      int
-	Offset     int    // Можно учесть после сортировки
-	Query      string // подстрока в 1 из полей
+	Limit int
+	// Можно учесть после сортировки
+	Offset int
+	// Подстрока в 1 из полей
+	Query string
+	// Name, id or age. Default - name if OrderField is empty
 	OrderField string
 	//  1 по возрастанию, 0 как встретилось, -1 по убыванию
 	OrderBy int
@@ -67,9 +61,7 @@ type SearchClient struct {
 
 // FindUsers отправляет запрос во внешнюю систему, которая непосредственно ищет пользователей
 func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
-
 	searcherParams := url.Values{}
-
 	if req.Limit < 0 {
 		return nil, fmt.Errorf("limit must be > 0")
 	}
@@ -106,15 +98,19 @@ func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) {
 	case http.StatusUnauthorized:
 		return nil, fmt.Errorf("bad AccessToken")
 	case http.StatusInternalServerError:
-		return nil, fmt.Errorf("SearchServer fatal error")
-	case http.StatusBadRequest:
+		return nil, fmt.Errorf("SearchServer fatal error. Body: %v", string(body))
+	case http.StatusNotFound:
 		errResp := SearchErrorResponse{}
 		err = json.Unmarshal(body, &errResp)
 		if err != nil {
 			return nil, fmt.Errorf("cant unpack error json: %s", err)
 		}
-		if errResp.Error == ErrorBadOrderField {
-			return nil, fmt.Errorf("OrderFeld %s invalid", req.OrderField)
+		return nil, fmt.Errorf("users not found")
+	case http.StatusBadRequest:
+		errResp := SearchErrorResponse{}
+		err = json.Unmarshal(body, &errResp)
+		if err != nil {
+			return nil, fmt.Errorf("cant unpack error json: %s", err)
 		}
 		return nil, fmt.Errorf("unknown bad request error: %s", errResp.Error)
 	}
