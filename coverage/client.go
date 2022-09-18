@@ -13,6 +13,7 @@ import (
 
 var (
 	client = &http.Client{Timeout: time.Second}
+
 )
 
 type User struct {
@@ -36,6 +37,7 @@ const (
 	OrderByAsc  = 1
 	OrderByAsIs = 0
 	OrderByDesc = -1
+
 )
 
 type SearchRequest struct {
